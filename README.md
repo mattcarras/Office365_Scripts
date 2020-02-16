@@ -1,2 +1,2 @@
 # Office365_Scripts
- Various scripts for managing Office 365 I created or tweaked to assist with automation and deployment. Any pieces of code I may have taken from various sites belongs to their original authors.
+ Various scripts to assist with automation, management, and deployment of Office 365 that I created or tweaked from public code snippets. Any tweaked code snippets belong to their original authors.
