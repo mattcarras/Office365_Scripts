@@ -3,9 +3,10 @@
 # Separate multiple mailboxes and multiple search strings with commas
 # REQUIRES: Must be run under Microsoft Exchange Online Powershell Module
 # Uses VisualBasic InputBox
-# Last Updated: 12-16-19 MattC
+# Last Updated: 3-26-20 MattC
 
-Write-Output('** NOTE: Make sure you are running from the Exchange Online Powershell Module shell')
+#Import Exchange Online Module
+Import-Module $((Get-ChildItem -Path $($env:LOCALAPPDATA + "\Apps\2.0\") -Filter Microsoft.Exchange.Management.ExoPowershellModule.dll -Recurse).FullName | ?{ $_ -notmatch "_none_" } | select -First 1)
 
 # Load VB assembly for InputBox
 [void][Reflection.Assembly]::LoadWithPartialName('Microsoft.VisualBasic')
@@ -28,7 +29,8 @@ If ( [string]::IsNullOrEmpty($sEmailAddress) -Or [string]::IsNullOrWhitespace($s
 	
 	# Connect to Exchange Online using official Exchange Online Powershell Module
 	Write-Output ("** Connecting to Exchange Online using the API from the official Exchange Online Powershell Module...")
-	Connect-EXOPSSession
+	$EXOSession = New-ExoPSSession -ErrorAction Stop
+	Import-PSSession $EXOSession -AllowClobber
 	
 	Write-Output ("** Searching mailbox configurations in EXO...")
 	ForEach ($email in $sEmailAddress) {
@@ -48,7 +50,7 @@ If ( [string]::IsNullOrEmpty($sEmailAddress) -Or [string]::IsNullOrWhitespace($s
 				ForEach ( $senderEmail in $sSearchFor ) {
 					$sFoundString = $sBlockedSenders | Select-String $senderEmail
 					If ( -Not ( [string]::IsNullOrEmpty($sFoundString) -Or [string]::IsNullOrWhitespace($sFoundString) ) ) {
-						Write-Output( "** FOUND {$0} in block list of EXO mailbox {$1}" -f $sFoundString, $email )
+						Write-Output( "** FOUND {0} in block list of EXO mailbox {1}" -f $sFoundString, $email )
 						$bFound = $TRUE
 					} # end if
 				} # end foreach
@@ -58,6 +60,8 @@ If ( [string]::IsNullOrEmpty($sEmailAddress) -Or [string]::IsNullOrWhitespace($s
 			} # end if
 		} # end if
 	} # end foreach
+	
+	Remove-PSSession $EXOSession
 } # end if
 	
 # Pause until a key is pressed

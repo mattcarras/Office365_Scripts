@@ -1,23 +1,22 @@
 # Converts mailboxes for given user IDs to shared and then remove licenses
 # Requires: 
-# - Microsoft Azure Active Directory Module for Windows PowerShell
+# - Microsoft Azure Active Directory Module for Windows PowerShell (Msol)
 # - Microsoft Exchange Online Powershell Module
-# NOTE: Must be run in the Exchange Online Powershell shell.
-# Last Updated: 2-16-20 Matt Carras
+# Last Updated: 3-26-2020 MJC
 
-## START CONFIGURATION ##
-$sLicensesToRemove = "contoso:ATP_ENTERPRISE","contoso:ENTERPRISEPACK" # You can use O365-Get-LicenseUsage-Report.ps1 to get these values
-																	   # Set it to "ALL" to remove ALL licenses found
-## END CONFIGURATION ##
+#Import MSOline Module
+Import-Module MSOnline
+ 
+#Import Exchange Online Module
+Import-Module $((Get-ChildItem -Path $($env:LOCALAPPDATA + "\Apps\2.0\") -Filter Microsoft.Exchange.Management.ExoPowershellModule.dll -Recurse).FullName | ?{ $_ -notmatch "_none_" } | select -First 1)
 
-Write-Output('** NOTE: Make sure you are running from the Exchange Online Powershell Module shell')
-
-# This will be populated below.
-$sUserIDs=""
+#Set admin UPN
+$UPN = 'mcarrasadmin@metacoastal.onmicrosoft.com'
 
 # Get mailboxes from user input
 # Load VB assembly for InputBox
-Write-Output ("{0}: Waiting for user input...")
+$sUserIDs=""
+Write-Output ("*** Waiting for user input...")
 [void][Reflection.Assembly]::LoadWithPartialName('Microsoft.VisualBasic')
 $sTitle = 'Input mailboxes to convert'
 $sMsg = 'Please enter comma-separated user IDs with mailboxes to convert to shared: '
@@ -25,33 +24,32 @@ $sUserIDs = [Microsoft.VisualBasic.Interaction]::InputBox($sMsg, $sTitle)
 
 # sanity check
 If ( [string]::IsNullOrEmpty($sUserIDs) -Or [string]::IsNullOrWhitespace($sUserIDs) ) {
-	Write-Output ("{0}: ERROR - No user ID(s) given. Aborting.")
-} Else {	
-	# TODO: Combine MFA-capable authentication so user doesn't get prompted twice
-	# Connect to Exchange Online using Microsoft Exchange Online Powershell Module
-	Write-Output ("{0}: Connecting to Exchange Online...")
-	Connect-EXOPSSession
+	Write-Output ("*** ERROR - No user ID(s) given. Aborting.")
+} Else {
+	Write-Output ("*** Connecting to Azure AD (Msol) and Exchange Online using UPN [{0}]..." -f $UPN)
+	Connect-MsolService -ErrorAction Stop
+	$EXOSession = New-ExoPSSession -UserPrincipalName $UPN -ErrorAction Stop
+	Import-PSSession $EXOSession -AllowClobber
 
+	Write-Output ("*** UserIDs given: $sUserIDs")
+	$sUserIDs = $sUserIDs -split ','
+	
 	ForEach ($mailbox in $sUserIDs) {
-		Write-Output ("{0}: Converting {1} to shared..." -f $mailbox)
+		Write-Output ("*** Converting {0} to shared..." -f $mailbox)
 		Set-Mailbox $mailbox -Type shared
 	} #end foreach
 
-	# Connect to Azure AD using Microsoft Azure Active Directory Module for Windows PowerShell
-	Write-Output ("{0}: Connecting to Azure AD...")
-	Import-Module MSOnline
-	Connect-MsolService
-
+	# Remove all licenses for each given user ID
 	ForEach ($userID in $sUserIDs) {
-		If ( $sLicensesToRemove -is "ALL" ) {
-			Write-Output ("{0}: Removing ALL licenses found from {1}..." -f $userID)
-			$sLicenses = Get-MsolUser -UserPrincipalName $userID | Select -ExpandProperty licenses﻿
-			Set-MsolUserLicense -UserPrincipalName $userID -RemoveLicenses $sLicenses
-		} Else {
-			Write-Output ("{0}: Removing given licenses from {1}..." -f $userID)
-			Set-MsolUserLicense -UserPrincipalName $userID -RemoveLicenses $sLicensesToRemove
-		} #end if
+		Write-Output ("*** Removing all licenses from {0} in Azure AD..." -f $userID)
+		Try {
+			(Get-MsolUser -UserPrincipalName $userID).licenses.AccountSkuId | Set-MsolUserLicense -UserPrincipalName $userID -RemoveLicenses $_
+		} Catch {
+			Write-Output ("*** WARNING: {0} not found in Azure AD or another error occurred removing licenses" -f $userID)
+		} #end try/catch
 	} #end foreach
+	
+	Remove-PSSession $EXOSession
 } # end if
 
 # Pause until a key is pressed
