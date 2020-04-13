@@ -1,4 +1,5 @@
 # Show password policy for users with expired passwords
+# Hint: For hybrid AD environments, look into the EnforceCloudPasswordPolicyForPasswordSyncedUsers option.
 Import-Module MSOnline
 Connect-MsolService
 Connect-AzureAD
